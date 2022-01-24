@@ -1,80 +1,8 @@
 import time
-import csv
 from tkinter import *
 from tkinter import messagebox
-import pymysql
-from sshtunnel import SSHTunnelForwarder
-import pandas as pd
-
-
-def get_tunnel():
-    ssh_host = '192.168.86.22'
-    ssh_port = 22
-    ssh_user = 'pi'
-    ssh_pw = 'raspberry'
-
-    sql_hostname = '127.0.0.1'
-    sql_port = 3306
-
-    temp_tunnel = SSHTunnelForwarder(
-            (ssh_host, ssh_port),
-            ssh_username=ssh_user,
-            ssh_password=ssh_pw,
-            remote_bind_address=(sql_hostname, sql_port))
-    temp_tunnel.start()
-    return temp_tunnel
-
-
-def query_db(q_tunnel, sn, query_type, data):
-    sql_username = 'user'
-    sql_password = 'password'
-    sql_main_database = '18650cells'
-
-    conn = pymysql.connect(host='127.0.0.1', user=sql_username,
-                           passwd=sql_password, db=sql_main_database,
-                           port=q_tunnel.local_bind_port)
-    # Type 1: SELECT
-    # Type 2: INSERT
-    # Type 3: UPDATE
-    # Type 4: Max ID
-    # Type 5: Cells needing update
-    if query_type == 1:
-        sql = "SELECT * FROM cellData WHERE serialNumber = " + sn + ";"
-        output = pd.read_sql_query(sql, conn)
-        data_list = output.values.tolist()
-        conn.close()
-        return data_list
-    elif query_type == 2:
-        with conn:
-            with conn.cursor() as cursor:
-                sql = "INSERT INTO `cellData` (`serialNumber`, `make`, `model`, `ir`, `capacity`, `dateTested`, " \
-                      "`voltageTested`, `dateRetested`, `voltageRetested`) VALUES ('" + data[0] + "', '" + data[1] + \
-                      "', '" + data[2] + "', '" + data[3] + "', '" + data[4] + "', '" + data[5] + "', '" + data[6] + \
-                      "', '" + data[7] + "', '" + data[8] + "');"
-                cursor.execute(sql)
-            conn.commit()
-    elif query_type == 3:
-        with conn:
-            with conn.cursor() as cursor:
-                sql = "UPDATE `cellData` SET `make` = '" + data[1] + "', `model` = '" + data[2] + \
-                      "', `ir` = '" + data[3] + "', `capacity` = '" + data[4] + "', `dateTested` = '" + \
-                      data[5] + "', `voltageTested` = '" + data[6] + "', `dateRetested` = '" + data[7] + \
-                      "', `voltageRetested` = '" + data[8] + "' WHERE `cellData`.`serialNumber` = " + sn + ";"
-                cursor.execute(sql)
-                conn.commit()
-    elif query_type == 4:
-        sql = "SELECT MAX(serialNumber) FROM cellData;"
-        output = pd.read_sql_query(sql, conn)
-        data_list = output.values.tolist()
-        conn.close()
-        return data_list
-    elif query_type == 5:
-        sql = "SELECT `serialNumber` FROM `cellData` WHERE `dateRetested` = '' AND " \
-              "DATEDIFF(CURRENT_DATE, `dateTested`) >= 14"
-        output = pd.read_sql_query(sql, conn)
-        data_list = output.values.tolist()
-        conn.close()
-        return data_list
+import database
+import repacker
 
 
 class Application:
@@ -161,7 +89,7 @@ class Application:
     def lookup(self, tun):
         sn = self.snEntry.get()
         self.clear()
-        data = query_db(tun, sn, 1, [])
+        data = database.query_db(tun, sn, 1, [])
         if data:
             self.snEntry.insert(0, data[0][0])
             self.makeEntry.insert(0, data[0][1])
@@ -189,7 +117,7 @@ class Application:
     def insert(self, tun):
         # Check is SN exists
         sn = self.snEntry.get()
-        lookup = query_db(tun, sn, 1, [])
+        lookup = database.query_db(tun, sn, 1, [])
         # If it does, tell user to update the record
         if lookup:
             messagebox.showerror(title='Error', message='Record already exists. Please lookup and update record')
@@ -199,7 +127,7 @@ class Application:
             data = [sn, self.makeEntry.get(), self.modelEntry.get(), self.irEntry.get(), self.capacityEntry.get(),
                     self.dateTestedEntry.get(), self.testedVoltageEntry.get(), self.dateRetestedEntry.get(),
                     self.retestedVoltageEntry.get()]
-            query_db(tun, sn, 2, data)
+            database.query_db(tun, sn, 2, data)
             self.max_sn['text'] = "Newest Cell ID: " + sn
             messagebox.showinfo(title='Insert', message='Record successfully inserted')
 
@@ -218,19 +146,19 @@ class Application:
         # Check is SN exists
         sn = self.snEntry.get()
         if sn != "":
-            lookup = query_db(tun, sn, 1, [])
+            lookup = database.query_db(tun, sn, 1, [])
             # If it does, update the record
             if lookup:
                 data = [sn, self.makeEntry.get(), self.modelEntry.get(), self.irEntry.get(), self.capacityEntry.get(),
                         self.dateTestedEntry.get(), self.testedVoltageEntry.get(), self.dateRetestedEntry.get(),
                         self.retestedVoltageEntry.get()]
-                query_db(tun, sn, 3, data)
+                database.query_db(tun, sn, 3, data)
                 messagebox.showinfo(title='Update', message='Record successfully updated')
             # If it doesn't tell user to use INSERT
             else:
                 messagebox.showerror(title='Error', message='Record does not exists. Please insert record')
         else:
-            cells = query_db(tun, sn, 5, [])
+            cells = database.query_db(tun, sn, 5, [])
             cell_string = ''
             if len(cells) > 0:
                 for i in range(0, len(cells)):
@@ -241,24 +169,9 @@ class Application:
                 messagebox.showinfo(title='Update', message='All cells are up to date')
 
 
-def get_max_id(tun):
-    data = query_db(tun, 0, 4, [])
-    return data[0][0]
-
-
-def bulk_load(tun):
-    with open('cells.csv') as csvfile:
-        reader = csv.reader(csvfile, delimiter=',')
-        for row in reader:
-            data = [row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[8], row[9]]
-            print(data)
-            query_db(tun, row[0], 2, data)
-            time.sleep(0.5)
-
-
 window = Tk()
-tunnel = get_tunnel()
-max_id = get_max_id(tunnel)
+tunnel = database.get_tunnel()
+max_id = database.get_max_id(tunnel)
 window.columnconfigure(2)
 window.rowconfigure(12)
 application = Application(window, tunnel, max_id)
