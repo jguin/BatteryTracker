@@ -172,7 +172,7 @@ class Application:
 window = Tk()
 tunnel = database.get_tunnel()
 max_id = database.get_max_id(tunnel)
-data = repacker.read_cells(tunnel, 1, 50)
+data = repacker.read_cells(tunnel, 1, 700)
 repacker.sort_cells(data)
 repacker.build_pack(14, data)
 window.columnconfigure(2)
