@@ -1,11 +1,19 @@
 import time
-from tkinter import *
+from tkinter import Label
+from tkinter import Entry
+from tkinter import Button
+from tkinter import Checkbutton
+from tkinter import StringVar
+from tkinter import OptionMenu
+from tkinter import WORD
+from tkinter import END
+from tkinter import Tk
 from tkinter import ttk
 from tkinter import messagebox
+from tkinter import INSERT
 from tkinter import scrolledtext
 import database
 import repacker
-import tkinter as tk
 
 
 class DatabaseData:
@@ -14,6 +22,7 @@ class DatabaseData:
         self.snEntry = Entry(win, bd=3)
         self.sn.grid(column=0, row=0, padx=5, pady=5)
         self.snEntry.grid(column=1, row=0, padx=5, pady=5)
+        self.snEntry.bind("<Return>", lambda *args: self.lookup(tun))
         self.max_sn = Label(win, text='Newest Cell ID: '+str(maxid))
         self.max_sn.grid(column=2, row=0, padx=5, pady=5)
         self.lookupButton = Button(win, text='Look Up', command=lambda: self.lookup(tun))
@@ -62,6 +71,7 @@ class DatabaseData:
         self.testedVoltage.grid(column=0, row=7, padx=5, pady=5)
         self.testedVoltageEntry = Entry(win, bd=3)
         self.testedVoltageEntry.grid(column=1, row=7, padx=5, pady=5)
+        self.testedVoltageEntry.bind("<Return>", lambda *args: self.insert(tun))
 
         # Date Retested
         self.dateRetested = Label(win, text='Date Retested')
@@ -76,6 +86,7 @@ class DatabaseData:
         self.retestedVoltage.grid(column=0, row=9, padx=5, pady=5)
         self.retestedVoltageEntry = Entry(win, bd=3)
         self.retestedVoltageEntry.grid(column=1, row=9, padx=5, pady=5)
+        self.retestedVoltageEntry.bind("<Return>", lambda *args: self.update_cell(tun))
 
         # Valid Cell
         self.valid = Label(win, text='Valid Cell?')
@@ -124,7 +135,7 @@ class DatabaseData:
         # If it does, tell user to update the record
         if lookup:
             messagebox.showerror(title='Error', message='Record already exists. Please lookup and update record')
-            self.clear()
+            # self.clear()
         # If it doesnt INSERT
         else:
             data = [sn, self.makeEntry.get(), self.modelEntry.get(), self.irEntry.get(), self.capacityEntry.get(),
@@ -133,6 +144,7 @@ class DatabaseData:
             database.query_db(tun, sn, 2, data)
             self.max_sn['text'] = "Newest Cell ID: " + sn
             messagebox.showinfo(title='Insert', message='Record successfully inserted')
+            self.snEntry.focus()
 
     def today_tested(self):
         today = time.strftime("%Y-%m-%d")
@@ -144,6 +156,7 @@ class DatabaseData:
         self.dateRetestedEntry.delete(0, 'end')
         self.retestedVoltageEntry.delete(0, 'end')
         self.dateRetestedEntry.insert(0, today)
+        self.retestedVoltageEntry.focus()
 
     def update_cell(self, tun):
         # Check is SN exists
@@ -157,6 +170,7 @@ class DatabaseData:
                         self.retestedVoltageEntry.get()]
                 database.query_db(tun, sn, 3, data)
                 messagebox.showinfo(title='Update', message='Record successfully updated')
+                self.snEntry.focus()
             # If it doesn't tell user to use INSERT
             else:
                 messagebox.showerror(title='Error', message='Record does not exists. Please insert record')
@@ -215,6 +229,7 @@ class Repacker:
             self.options.append(str(x))
         self.drop = OptionMenu(win, self.cell_variable, *self.options, command=self.display_selected_cell)
         self.drop.grid(column=0, row=4, padx=5, pady=5, sticky='w')
+        messagebox.showinfo(title='Cells Processed', message='Cells sorted into packs successfully')
 
     def display_selected_cell(self, choice):
         choice = self.cell_variable.get()
@@ -223,10 +238,10 @@ class Repacker:
         self.serial_number_list.configure(state='normal')
         self.serial_number_list.delete(1.0, END)
         for x in range(1, len(current_pack)):
-            self.serial_number_list.insert(tk.INSERT, str(current_pack[x][0])+', ')
+            self.serial_number_list.insert(INSERT, str(current_pack[x][0])+', ')
             total_cell_capacity += current_pack[x][1]
         self.serial_number_list.delete("end-3c", END)
-        self.serial_number_list.insert(tk.INSERT, "\r\nTotal Capacity: " + str(total_cell_capacity))
+        self.serial_number_list.insert(INSERT, "\r\nTotal Capacity: " + str(total_cell_capacity))
         self.serial_number_list.configure(state='disabled')
 
 
